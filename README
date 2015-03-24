@@ -1,0 +1,55 @@
+Cacti
+  Overview
+    this is a basic cacti server that graphs cpu, memory, load average, and eth trafficthis is a basic cacti server that graphs cpu, memory, load average, and eth trafficthis is a basic cacti server that graphs cpu, memory, load average, and eth trafficthis is a basic cacti server that graphs cpu, memory, load average, and eth traffic
+    snmp3 is used to get data from the server
+    this role can be run on any servers you want to monitor and you specify the cacti server with the cacti group and run this role on it for setup
+
+  Requirements
+    snmp3 must be configured on the server you are monitoring. I have a snmp repo that will do this for you if you need it
+    mysql or mardiadb for storage
+    a my.cnf file in /root so auto login is possible
+    epel repos
+
+  Ansible Variables
+    mysql_cacti_password=password  || has to be set for the cacti server
+    htaccessuser=cacti             || user for login to cacti only needed on cacti server
+    htaccesspass=password          || password for login to cacti only needed on cacti server
+    snmp3user=snmpuse              || needed for servers being graphedr
+    snmp3password=snmppass         || needed for servers being graphed
+
+  Files
+    /usr/share/cacti/               || web directory
+    /usr/share/cacti/cli            || cli scripts
+    /var/log/cacti/cacti.log        || cacti error log
+
+  Ports
+   outgoing udp on port 23
+   outgoing snmp tcp on port 161
+   in coming tcp to snmpd on port 199
+   in/out tcp to httpd on port 80
+   in/out tcp to mysql on port 3306
+
+  Resources
+    http://www.cacti.net/downloads/docs/html/cli_add_graphs.html || manually adding graphs. good for troubleshooting setup issues
+
+  Basic Tasks
+    Add user
+      add htaccess information to /var/www/htpasswd/users
+      no additonal cacti information is needed as cacti is configured to not use access control at the moment
+
+    Adding server to monitor
+      use the ansible cacticlient role to automatically setup a server for this
+      manually via cli (replace HOSTNAME, IPADDRESS, and DEVICE-ID should be replaced with the output of the first command)
+        cd /usr/share/cacti/cli/
+        php -q add_device.php --description="HOSTNAME" --ip="IPADDRESS" --template=9 --community="vwr24bruread" --version=3 | grep "device-id"
+        php -q add_graphs.php --host-id=DEVICE-ID --graph-type=cg --graph-template-id=4
+        php -q add_graphs.php --host-id=DEVICE-ID --graph-type=cg --graph-template-id=11
+        php -q add_graphs.php --host-id=DEVICE-ID --graph-type=cg --graph-template-id=13
+        php -q add_graphs.php --host-id=DEVICE-ID --graph-type=ds --snmp-query-id=1 --snmp-query-type-id=13 --snmp-field=ifOperStatus --snmp-value=Up  --graph-template-id=32
+        php -q add_tree.php --type=node --node-type=host --tree-id=1 --host-id=DEVICE-ID
+          The last add_graph command can fail if snmp isn't configured correctly in which case it won't see a eth port to configure this for
+          note this is dependent on a custom template being added for ventrilo. the ansible setup should have added this.
+
+    Disable cacti
+      vim /etc/cron.d/cacti || comment out the cacti poller line then disable web access for cacti
+

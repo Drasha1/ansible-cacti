@@ -1,0 +1,62 @@
+---
+- name: install php
+  yum: name=php-mysql,php-pear,php-common,php-gd,php-devel,php,php-mbstring,php-cli,php-snmp,php-pear-Net-SMTP state=latest
+
+- name: install http 
+  yum: name=httpd,python-passlib state=latest
+
+- name: http cacti conf file
+  copy: src=http.cacti.conf dest=/etc/httpd/conf.d/cacti.conf
+
+- name: restart httpd
+  service: name=httpd state=restarted enabled=yes
+
+- name: create cacti database
+  mysql_db: name=cacti state=present
+
+- name: add cacti database user
+  mysql_user: user=cacti host=% password={{ mysql_cacti_password }} state=present priv=cacti.*:ALL,GRANT
+
+- name: edit snmpd conf
+  copy: src=snmpd.conf dest=/etc/snmp/snmpd.conf
+
+- name: install cacti
+  yum: name=cacti state=latest
+
+- name: add cron file
+  copy: src=cron.cacti dest=/etc/cron.d/cacti
+
+- name: setup htpasswd
+  file: path=/var/www/htpasswd state=directory
+- htpasswd: path=/var/www/htpasswd/users name={{ htaccessuser }}  password={{ htaccesspass }}
+- copy: src=htaccess dest=/usr/share/cacti/.htaccess
+
+- name: configure cacti db.php
+  template: src=db.php dest=/etc/cacti/db.php
+
+- name: get cacti databases sql file
+  shell: "rpm -ql cacti | grep cacti.sql"
+  register: cactiSql
+
+- name: imporart cacti database tables
+  mysql_db: name=cacti state=import target={{ cactiSql.stdout }}
+  ignore_errors: True
+
+- name: setup cron for the poller
+  lineinfile: dest=/etc/cron.d/cacti line="*/5 * * * * cacti php /usr/share/cacti/poller.php > /dev/null 2>&1"
+
+- name: edit database to finish install with out promting for input
+  shell: mysql cacti -e "update user_auth SET password = md5('{{ mysql_cacti_password}}') WHERE username = 'admin';"
+- shell: mysql cacti -e "UPDATE user_auth SET must_change_password = '' WHERE username = 'admin';"
+- shell: mysql cacti -e "UPDATE version SET cacti = '`rpm -q cacti --queryformat \"%{VERSION}\"`';"
+- shell: mysql cacti -e "INSERT IGNORE INTO settings_graphs (user_id, name, value) VALUES (1, 'treeview_graphs_per_page', '100');"
+- shell: mysql cacti -e "INSERT IGNORE INTO settings (name,value) VALUES ('path_rrdtool', '`which rrdtool`'), ('path_snmpget', '`which snmpget`'), ('path_php_binary', '`which php`'), ('path_snmpwalk','`which snmpwalk`'),('path_snmpbulkwalk', '`which snmpbulkwalk`'), ('path_snmpgetnext', '`which snmpgetnext`'), ('path_cactilog', '`rpm -ql cacti | grep cacti\\\.log$`'), ('snmp_version', 'net-snmp'),('rrdtool_version', 'rrd-1.3.x'),('poller_lastrun','1420905301'),('path_webroot','/usr/share/cacti'),('date','2015-01-10 10:55:01'),('stats_poller','Time:0.2922 Method:cmd.php Processes:1 Threads:N/A Hosts:3 HostsPerProcess:3 DataSources:13 RRDsProcessed:11'),('stats_recache','RecacheTime:0.0 HostsRecached:0'),('auth_method','0'),('guest_user','0'),('user_template','0'),('ldap_server',''),('ldap_port','389'),('ldap_port_ssl','636'),('ldap_version','3'),('ldap_encryption','0'),('ldap_referrals','0'),('ldap_mode','0'),('ldap_dn',''),('ldap_group_require',''),('ldap_group_dn',''),('ldap_group_attrib',''),('ldap_group_member_type','1'),('ldap_search_base',''),('ldap_search_filter',''),('ldap_specific_dn',''),('ldap_specific_password','');"
+
+#import templates not importing templates by default but you can uncomment this if you have templates you need to import
+#- name: add template
+#  copy: src=template.xml dest=/root/template.xml
+#- shell: "php /usr/share/cacti/cli/import_template.php --filename=/root/template.xml --with-template-rras"
+#- file: path=/root/template.xml state=absent
+
+- name: php timezone fix
+  lineinfile: dest=/etc/php.ini line="date.timezone = America/New_York"

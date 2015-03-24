@@ -1,0 +1,43 @@
+---
+- name: set cacti cli directory
+  set_fact: cli="/usr/share/cacti/cli/"
+
+# create host and grab device id for the commands after it
+- name: create host
+  shell: php {{ cli }}add_device.php --description="{{ hostname }}" --ip="{{ ansible_default_ipv4.address }}" --template=9 --community="junkcommunity" --version=3 --username={{ snmp3user }} --password={{ snmp3password}} | grep "device-id"
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+  register: deviceId
+
+- name: hacky filter for the device id
+  shell: echo '{{ deviceId.results[0].stdout }}' | awk -F'[()]' '{print $2}'
+  register: deviceId 
+- set_fact: deviceId={{ deviceId.stdout }}
+
+- name: add ucd/net - CPU Usage
+  command: php {{ cli }}add_graphs.php --host-id={{ deviceId }} --graph-type=cg --graph-template-id=4 
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+
+- name: add ucd/net - Load Average
+  command: php {{ cli }}add_graphs.php --host-id={{ deviceId }} --graph-type=cg --graph-template-id=11 
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+
+- name: add ucd/net - Memory Usage
+  command: php {{ cli }}add_graphs.php --host-id={{ deviceId }} --graph-type=cg --graph-template-id=13 
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+
+# this will fail if snmp is not setup correct on the garget server
+- name: add network graph
+  command: php {{ cli }}add_graphs.php --host-id={{ deviceId }} --graph-type=ds --snmp-query-id=1 --snmp-query-type-id=13 --snmp-field=ifOperStatus --snmp-value=Up  --graph-template-id=32
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+
+- name: add to graph tree
+  command: php {{ cli }}add_tree.php --type=node --node-type=host --tree-id=1 --host-id={{ deviceId }}
+  delegate_to: "{{ item }}"
+  with_items: groups.cacti
+
+
