@@ -4,7 +4,7 @@
 
 # create host and grab device id for the commands after it
 - name: create host
-  shell: php {{ cli }}add_device.php --description="{{ hostname }}" --ip="{{ ansible_default_ipv4.address }}" --template=9 --community="junkcommunity" --version=3 --username={{ snmp3user }} --password={{ snmp3password}} | grep "device-id"
+  shell: php {{ cli }}add_device.php --description="{{ hostname }}" --ip="{{ ansible_default_ipv4.address }}" --template=1 --community="junkcommunity" --version=3 --username={{ snmp3user }} --password={{ snmp3password}} | grep "device-id"
   delegate_to: "{{ item }}"
   with_items: groups.cacti
   register: deviceId
